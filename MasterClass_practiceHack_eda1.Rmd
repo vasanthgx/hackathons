@@ -1,0 +1,229 @@
+---
+title: "Masterclass_minihack"
+author: "vasanth"
+date: "November 14, 2017"
+output: html_document
+---
+
+```{r setup, cache=TRUE,include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r warning = FALSE, message=FALSE}
+
+
+
+
+library(tidyverse)
+library(funModeling)
+library(corrplot)
+train <- read_csv("E:/Analytics Vidhya/DHS2017/train_DDIE2Cp.csv")
+test <- read_csv("E:/Analytics Vidhya/DHS2017/test_KhGKZ2S.csv")
+t <- names(train) %in% names(test)
+names(train[!t])
+#target variable is "certified"
+
+## Dataset health status
+#-----------------------------------------------
+
+#seems like the data is very well curated. percentage of zeros and NA are 
+# negligible
+# Also there is an imbalance between course Title(140) and Course number(145) of 5
+# it is due to the disparity in the data entry of the alphanumerical code of 
+# the course number
+
+train <- train %>% rename(course_number = `Course Number`,launch_date = `Launch Date`,course_title = `Course Title`,
+course_subject = `Course Subject`,honor_code_cert = `Honor Code Certificates`,perc_audited = `% Audited`,
+perc_played_video = `% Played Video`, perc_posted_in_forum = `% Posted in Forum`,
+perc_grade_higher_than_zero = `% Grade Higher Than Zero`, perc_male = `% Male`, perc_female = `% Female`,
+perc_bachelor_degree_higher = `% Bachelor's Degree or Higher`)
+
+data_summary <- df_status(train, print_results = FALSE)
+data_summary
+
+# using the describe function to know the missing values in the categoricals
+cat_variables <- train %>% select(course_number,course_subject, course_title,Institution,Instructors,perc_played_video) %>% describe()
+#there is no missing values among the categorical variables except for one
+# '---' in the '% Played Video'
+cat_variables
+
+# profiling categorical variables
+
+freq <- freq(data = train,  path = "cat_variables")
+
+
+
+freq1 <- head(freq(data = train$course_title, plot = FALSE),80)# these top 80 courses contribute
+# to 70 percent of the data
+freq1
+freq2 <- head(freq(data = train$course_number, plot = FALSE),80)
+freq2
+freq3 <- head(freq(data = train$Instructors, plot = FALSE),60)# these 60 professors cover
+# 75% of the courses in the data (out of the 111 instructors  )
+freq3
+freq4 <- head(freq(data = train$perc_played_video, plot = FALSE),60)
+freq4
+
+freq5 <- head(freq(data = train$Institution, plot = FALSE))
+freq5
+
+
+freq6 <- head(freq(data = train$course_subject, plot = FALSE))
+freq6
+
+
+#There is a difference in the frequency of the Course Title and their respective
+# Course Number, due to wrong spacing of the alphanumericals that appear in the
+# Course Number field
+
+
+
+
+v <- train %>% filter(course_title == 'Evaluating Social Programs'|course_title == 'Introduction to Computational Thinking and Data Science') %>% select('course_title','course_number')
+
+v
+
+cs <- train %>% filter(course_subject == 'Computer Science') %>% select(course_subject,course_title, Instructors,Certified,Year,launch_date,Institution,perc_played_video )
+g1 <- ggplot(cs,aes(Certified, course_title,colour = `Year`))+ geom_point()
+g2 <- ggplot(cs,aes(Certified, course_title,colour = `Instructors`))+ geom_point()
+g3 <- ggplot(cs,aes(Certified, course_title,colour = `Institution`))+ geom_point()#seems like harvard offers
+# only one course in computer subject
+
+
+g5 <- ggplot(train,aes(Certified, course_title,colour = `Year`))+ geom_point()
+
+##Profiling the numerical values
+#------------------------------------------
+
+
+cat_vars <- train[c(1:2,4:6,12)]
+cat_vector <- c(1:2,4:6,12)
+num_vars <- train[-cat_vector]
+
+# profiling the Launch date variable and Year
+year1 <- num_vars %>% filter(Year == 1) %>% select(launch_date)
+year1_days <- as.Date(year1$launch_date[16])-as.Date(year1$launch_date[1])
+year1_days#269 days
+
+year2 <- num_vars %>% filter(Year == 2) %>% select(launch_date)
+year2_days <- as.Date(year2$launch_date[50])-as.Date(year2$launch_date[1])
+year2_days# 310 days
+
+year3 <- num_vars %>% filter(Year == 3) %>% select(launch_date)
+year3_days <- as.Date(year3$launch_date[92])-as.Date(year3$launch_date[1])
+year3_days # 615 days
+
+year4 <- num_vars %>% filter(Year == 4) %>% select(launch_date)
+year4_days <- as.Date(year4$launch_date[40])-as.Date(year4$launch_date[1])
+year4_days # 161 days
+
+total_no_days <- year1_days+year2_days+year3_days+year4_days
+total_no_days #1335 days
+
+ggplot()
+
+train <- train %>% group_by(Year) %>% mutate(mean_cert = mean(Certified))
+qplot(train$Year, train$mean_cert, train)
+gg1 <- ggplot(train, aes(Year, mean_cert,colour = "course_subject")) 
+gg1 + geom_point()
+gg2 <- ggplot(train, aes(Year, Certified, colour = "course_subject"))
+
+gg2 + geom_point()
+
+
+#----------------------------------------------
+
+profiling_table <- profiling_num(train,print_results = FALSE) %>% select(variable,mean,p_01,p_99,range_80)
+plot_num(train, bins = 5)
+
+
+#------------------------
+
+## corelation
+
+library(reshape2)
+library(minerva)
+library(gridExtra)
+
+
+corrplot(cor(num_vars[-1],use = "complete.obs"), type = "lower")
+
+#high correlation between Participants(course content Accessed) and Audited > 50%
+cor(num_vars$`Participants (Course Content Accessed)`, num_vars$`Audited (> 50% Course Content Accessed)`)
+#.85
+
+cor(num_vars$ID, num_vars$Year) # .92
+
+cor(num_vars$perc_bachelor_degree_higher, num_vars$`Median Age`)# .65
+
+cor(num_vars$perc_female, num_vars$`Median Age`)# .67
+
+cor(num_vars$perc_male, num_vars$`Median Age`)# -.67
+
+cor(num_vars$perc_male, num_vars$perc_female)# -1 ..very high negative corelation
+
+
+
+
+
+# correlation between categorical variables
+
+dim(cat_vars)
+cat_vars1 <- cbind(cat_vars,Certified =train$Certified)
+library(caret)
+
+
+cat_vars1 <- cbind(cat_vars,Certified =train$Certified)
+dmy <- dummyVars(Certified ~., data = cat_vars1)
+
+cat_vars2 <- data.frame(predict(dmy, newdata = cat_vars1))
+mine <- minerva::mine(cat_vars2)
+mine$MIC[1:6,1:6]
+library(RColorBrewer)
+
+corrplot(mine$MIC[1:10,1:10], method="circle",
+col=brewer.pal(n=10, name="PuOr"),
+# only display upper diagonal
+type="lower",
+#label color, size and rotation
+tl.col="red", tl.cex = 0.9, tl.srt=90,
+# dont print diagonal (var against itself)
+#diag = FALSE
+diag= TRUE,
+# accept a any matrix, mic in this case (not a correlation
+#   element)
+is.corr = F
+)
+
+
+# course_titleA.New.Naional.Culture and course_numberSW12.4x are correlated
+corrplot(mine$MIC[101:150,101:150], method="circle",
+col=brewer.pal(n=10, name="PuOr"),
+# only display upper diagonal
+type="lower",
+#label color, size and rotation
+tl.col="red", tl.cex = 0.55, tl.srt=90,
+# dont print diagonal (var against itself)
+diag= TRUE,
+# accept a any matrix, mic in this case (not a correlation
+#   element)
+is.corr = F
+)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```
+
